@@ -1,0 +1,14 @@
+# Chặn thư mục node_modules ở bất kỳ đâu (cả thư mục gốc lẫn frontend/backend)
+node_modules/
+*/node_modules/
+*/*/node_modules/
+
+
+
+# Chặn rác của hệ điều hành
+.DS_Store
+Thumbs.db
+
+# Chặn file log lỗi
+npm-debug.log*
+yarn-error.log*
