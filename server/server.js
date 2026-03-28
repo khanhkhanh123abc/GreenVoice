@@ -5,7 +5,6 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Import các Routes
 import authRoutes from "./routes/auth.js";
 import ideaRoutes from "./routes/ideas.js";
 import categoryRoutes from "./routes/categories.js";
@@ -17,8 +16,7 @@ import learningMaterialRoutes from "./routes/learningMaterials.js";
 import reportRoutes from "./routes/reports.js";
 import campaignRoutes from "./routes/campaign.js";
 import classRoutes from "./routes/classes.js";
-
-
+import { startDailyStatsCronJob } from "./jobs/dailyTopicStats.js";
 
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -32,15 +30,14 @@ const __dirname = path.dirname(__filename);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173", // Cổng mặc định của React Vite
+    origin: "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "DELETE"],
   },
-})
+});
 
 io.on("connection", (socket) => {
   console.log("🟢 Một thiết bị đã kết nối Real-time:", socket.id);
 
-  // Khi Frontend gửi ID lên, đưa user đó vào 1 "phòng" riêng biệt
   socket.on("joinUserRoom", (userId) => {
     socket.join(userId);
     console.log(`👤 User ${userId} đã bật kênh nhận thông báo cá nhân`);
@@ -50,19 +47,16 @@ io.on("connection", (socket) => {
     console.log("🔴 Thiết bị đã ngắt kết nối:", socket.id);
   });
 });
+
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
 
-// Middleware
 app.use(cors());
 app.use(express.json());
-
-// Cấu hình để có thể xem được ảnh/file upload từ trình duyệt
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Khai báo các API Endpoints
 app.use("/api/auth", authRoutes);
 app.use("/api/ideas", ideaRoutes);
 app.use("/api/categories", categoryRoutes);
@@ -79,11 +73,11 @@ app.get("/", (req, res) => {
   res.send("API is running...");
 });
 
-// Kết nối MongoDB và Khởi chạy Server
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB connected");
+    startDailyStatsCronJob(); // ← Khởi động cron job
     const PORT = process.env.PORT || 5000;
     httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT} with WebSockets 🚀`);

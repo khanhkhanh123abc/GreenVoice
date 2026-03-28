@@ -1,38 +1,182 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axiosInstance";
 import Layout from "../components/Layout";
 import Topbar from "../components/Topbar";
+import { downloadCSV, downloadZIP, getAnalyticsFiles } from "../utils/downloadUtils";
+import { socket } from "../App";
+import "../styles/Analytics.css";
 
-const STATS = [
-  { key: "totalIdeas", icon: "💡", label: "Total Ideas Submitted", color: "#2563EB", delta: "+12%" },
-  { key: "totalUsers", icon: "👥", label: "Active Staff Members", color: "#10B981", delta: "+5 New" },
-  { key: "totalVotes", icon: "⭐", label: "Total Student Votes", color: "#F59E0B", delta: "+8%" },
-];
+// ── Tooltip ──────────────────────────────────
+function Tooltip({ visible, x, y, content }) {
+  if (!visible) return null;
+  return (
+    <div className="analytics-tooltip" style={{ left:x+14, top:y }}>
+      <div className="analytics-tooltip-inner">
+        {content}
+      </div>
+    </div>
+  );
+}
 
-export default function Analytics() {
-  const { user } = useAuth();
-  const isManager = ["Administrator", "QA Manager"].includes(user?.role);
+// ── Interactive Bar Chart ─────────────────────
+function BarChart({ data, maxVal, color = "linear-gradient(90deg,#3B82F6,#60A5FA)", label = "count" }) {
+  const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: "" });
+  const [hovered, setHovered] = useState(null);
 
-  const [categories, setCategories] = useState([]);
-  const [newCatName, setNewCatName] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [catError, setCatError] = useState("");
-  const [ideas, setIdeas] = useState([]);
-  const [stats, setStats] = useState({ totalIdeas: 0, totalUsers: 0, totalVotes: 0 });
+  return (
+    <div className="analytics-bar-chart">
+      <Tooltip {...tooltip} />
+      {data.map(([type, count], i) => (
+        <div
+          key={type}
+          className="analytics-bar-row"
+          onMouseEnter={e => { setHovered(i); setTooltip({ visible:true, x:e.clientX, y:e.clientY, content:`${type}: ${count} ideas` }); }}
+          onMouseMove={e => setTooltip(t => ({ ...t, x:e.clientX, y:e.clientY }))}
+          onMouseLeave={() => { setHovered(null); setTooltip(t => ({ ...t, visible:false })); }}
+        >
+          <div className={`analytics-bar-label${hovered===i?" hovered":""}`}>{type}</div>
+          <div className="analytics-bar-track">
+            <div className={`analytics-bar-fill${hovered===i?" hovered":""}`} style={{ width: `${(count/maxVal)*100}%` }} />
+          </div>
+          <div className={`analytics-bar-count${hovered===i?" hovered":""}`}>{count}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Interactive Table Row ─────────────────────
+function IdeaRow({ idea, rank }) {
+  const [hovered, setHovered] = useState(false);
+  const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: "" });
+  const rankStyle = rank < 3 ? {
+    background: rank===0?"#FEF9C3":rank===1?"#F3F4F6":"#FEF3C7",
+    color:      rank===0?"#CA8A04":rank===1?"#6B7280":"#D97706",
+  } : null;
+
+  return (
+    <tr
+      className={`analytics-tr${hovered?" hovered":""}`}
+      onMouseEnter={e => { setHovered(true); setTooltip({ visible:true, x:e.clientX, y:e.clientY, content:`Views: ${idea.views || 0} · Reactions: ${(idea.reactions||0)+(idea.likes?.length||0)}` }); }}
+      onMouseMove={e => setTooltip(t => ({ ...t, x:e.clientX, y:e.clientY }))}
+      onMouseLeave={() => { setHovered(false); setTooltip(t => ({ ...t, visible:false })); }}
+    >
+      <Tooltip {...tooltip} />
+      <td className="analytics-td">
+        {rankStyle
+          ? <span className="analytics-rank-badge" style={rankStyle}>{rank+1}</span>
+          : <span className="analytics-rank-num">{rank+1}</span>
+        }
+      </td>
+      <td className="analytics-td analytics-td-title">
+        <div className="analytics-idea-title">{idea.title}</div>
+        <div className="analytics-idea-type">{idea.topicType}</div>
+      </td>
+      <td className={`analytics-td analytics-votes`}>{idea.votes}</td>
+    </tr>
+  );
+}
+
+// ── Stat Card with pulse on update ───────────
+function StatCard({ icon, label, value, color, delta, updated }) {
+  const [pulse, setPulse] = useState(false);
+  const prevVal = useRef(value);
 
   useEffect(() => {
-    api.get("/ideas?limit=100").then(({ data }) => {
-      setIdeas(data.ideas || []);
-      const total = data.pagination?.total || 0;
-      const votes = (data.ideas || []).reduce((s, i) => s + (i.votes || 0), 0);
-      setStats(prev => ({ ...prev, totalIdeas: total, totalVotes: votes }));
-    }).catch(() => {});
+    if (prevVal.current !== value && prevVal.current !== 0) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 600);
+      return () => clearTimeout(t);
+    }
+    prevVal.current = value;
+  }, [value]);
 
+  return (
+    <div className="analytics-stat-card" style={{ boxShadow: pulse ? `0 0 0 3px ${color}40` : "none" }}>
+      <div className="analytics-stat-top">
+        <span className="analytics-stat-icon" style={{ color }}>{icon}</span>
+        <span className="analytics-delta">{delta}</span>
+      </div>
+      <div className="analytics-stat-label">{label}</div>
+      <div className="analytics-stat-value" style={{ color, transform: pulse ? "scale(1.05)" : "scale(1)" }}>
+        {typeof value === "number" ? value.toLocaleString() : value || 0}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────
+export default function Analytics() {
+  const { user } = useAuth();
+  const isManager = ["Administrator","QA Manager"].includes(user?.role);
+
+  const [ideas, setIdeas]         = useState([]);
+  const [stats, setStats]         = useState({ totalIdeas:0, totalUsers:0, totalVotes:0 });
+  const [categories, setCategories] = useState([]);
+  const [newCatName, setNewCatName] = useState("");
+  const [adding, setAdding]       = useState(false);
+  const [catError, setCatError]   = useState("");
+  const [dlState, setDlState]     = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const timerRef = useRef(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const { data } = await api.get("/ideas?limit=500");
+      const list = data.ideas || [];
+      setIdeas(list);
+      setStats({
+        totalIdeas: data.pagination?.total || list.length,
+        totalUsers: 0,
+        totalVotes: list.reduce((s,i) => s+(i.votes||0), 0),
+      });
+      setLastUpdated(new Date());
+    } catch {}
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    // Socket real-time
+    socket.on("analyticsUpdate", fetchData);
+    // Polling fallback mỗi 30s
+    timerRef.current = setInterval(fetchData, 1000);
+    return () => {
+      socket.off("analyticsUpdate", fetchData);
+      clearInterval(timerRef.current);
+    };
+  }, [fetchData]);
+
+  useEffect(() => {
     if (isManager) {
       api.get("/categories").then(({ data }) => setCategories(data.categories || [])).catch(() => {});
     }
   }, [isManager]);
+
+  // ── Download handlers ──
+  const handleDownloadCSV = () => {
+    if (!ideas.length) return;
+    setDlState("csv");
+    downloadCSV(
+      [...ideas].sort((a,b)=>b.votes-a.votes).map((idea,i) => ({
+        rank: i+1, title: idea.title, type: idea.topicType,
+        votes: idea.votes, views: idea.views,
+        author: idea.isAnonymous?"Anonymous":idea.authorId?.name||"—",
+      })),
+      ["rank","title","type","votes","views","author"],
+      "analytics_ideas.csv"
+    );
+    setTimeout(() => setDlState(null), 800);
+  };
+
+  const handleDownloadZIP = () => {
+    if (!ideas.length) return;
+    setDlState("zip");
+    downloadZIP(getAnalyticsFiles(ideas, categories), "analytics_dashboard.zip");
+    setTimeout(() => setDlState(null), 1000);
+  };
 
   const handleAddCategory = async (e) => {
     e.preventDefault();
@@ -51,203 +195,152 @@ export default function Analytics() {
     try {
       await api.delete(`/categories/${id}`);
       setCategories(prev => prev.filter(c => c._id !== id));
-    } catch { }
+    } catch {}
   };
 
-  // Ideas per department (fake from topicType)
-  const byType = ideas.reduce((acc, idea) => {
-    acc[idea.topicType] = (acc[idea.topicType] || 0) + 1;
-    return acc;
-  }, {});
+  const byType  = ideas.reduce((acc, i) => { acc[i.topicType]=(acc[i.topicType]||0)+1; return acc; }, {});
+  const maxBar  = Math.max(...Object.values(byType), 1);
+  const topIdeas = [...ideas].sort((a,b) => b.votes-a.votes).slice(0,5);
 
-  const maxBar = Math.max(...Object.values(byType), 1);
+  const STATS_CFG = [
+    { key:"totalIdeas", icon:"💡", label:"Total Ideas Submitted", color:"#2563EB", delta:"+real" },
+    { key:"totalUsers", icon:"👥", label:"Active Staff Members",  color:"#10B981", delta:"live" },
+    { key:"totalVotes", icon:"⭐", label:"Total Student Votes",   color:"#F59E0B", delta:"+real" },
+  ];
 
   return (
     <Layout>
       <Topbar title="Analytics Dashboard" />
+      <main className="analytics-main">
 
-      <main style={s.main}>
-        <div style={s.pageHeader}>
-          <h1 style={s.pageTitle}>Analytics Dashboard</h1>
-          <p style={s.pageSub}>Overview of university-wide idea submission and quality assurance metrics.</p>
-          <div style={s.pageActions}>
-            <button style={s.downloadBtn}>📥 Download CSV</button>
-            <button style={s.downloadBtn}>📦 Download ZIP</button>
+        {/* Header */}
+        <div className="analytics-header">
+          <div>
+            <h1 className="analytics-page-title">Analytics Dashboard</h1>
+            <p className="analytics-page-sub">Overview of university-wide idea submission and quality assurance metrics.</p>
+          </div>
+          <div className="analytics-header-right">
+            {lastUpdated && (
+              <div className="analytics-live-badge">
+                <span className="analytics-live-dot" />
+                Live · {lastUpdated.toLocaleTimeString()}
+              </div>
+            )}
+            <div className="analytics-actions">
+              <button onClick={handleDownloadCSV} disabled={!ideas.length||!!dlState}
+                className={`analytics-btn-csv${dlState==="csv"?" downloading":""}`}>
+                {dlState==="csv"?"⏳ Downloading...":"📥 Download CSV"}
+              </button>
+              <button onClick={handleDownloadZIP} disabled={!ideas.length||!!dlState}
+                className={`analytics-btn-zip${dlState==="zip"?" zipping":""}`}>
+                {dlState==="zip"?"⏳ Zipping...":"📦 Download ZIP"}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Stats */}
-        <div style={s.statsRow}>
-          {STATS.map(({ key, icon, label, color, delta }) => (
-            <div key={key} style={s.statCard}>
-              <div style={s.statTop}>
-                <span style={{ ...s.statIcon, color }}>{icon}</span>
-                <span style={s.delta}>{delta}</span>
-              </div>
-              <div style={s.statLabel}>{label}</div>
-              <div style={{ ...s.statValue, color }}>{stats[key]?.toLocaleString() || 0}</div>
-            </div>
+        <div className="analytics-stats-row">
+          {STATS_CFG.map(({ key, icon, label, color, delta }) => (
+            <StatCard key={key} icon={icon} label={label} value={stats[key]} color={color} delta={delta} updated={lastUpdated} />
           ))}
         </div>
 
-        <div style={s.row}>
-          {/* Ideas per Type (bar chart) */}
-          <div style={{ ...s.card, flex: 1.2 }}>
-            <div style={s.cardTitleRow}>
-              <div>
-                <h3 style={s.cardTitle}>Ideas per Department</h3>
-                <p style={s.cardSub}>Distribution across topic types</p>
-              </div>
-              <button style={s.menuBtn}>⋯</button>
-            </div>
-            <div style={s.barChart}>
-              {Object.entries(byType).length === 0 ? (
-                <div style={{ textAlign: "center", color: "#9CA3AF", padding: "40px 0", fontSize: 14 }}>No data yet</div>
-              ) : (
-                Object.entries(byType).map(([type, count]) => (
-                  <div key={type} style={s.barRow}>
-                    <div style={s.barLabel}>{type}</div>
-                    <div style={s.barTrack}>
-                      <div style={{ ...s.barFill, width: `${(count / maxBar) * 100}%` }} />
-                    </div>
-                    <div style={s.barCount}>{count}</div>
+        {loading ? (
+          <div className="analytics-loading">
+            <div className="analytics-spinner" />
+            Loading...
+          </div>
+        ) : (
+          <>
+            <div className="analytics-row">
+              {/* Bar chart */}
+              <div className="analytics-card analytics-card-wide">
+                <div className="analytics-card-title-row">
+                  <div>
+                    <h3 className="analytics-card-title">Ideas per Department</h3>
+                    <p className="analytics-card-sub">Hover bars to see details</p>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
+                  <span className="analytics-card-badge">
+                    {ideas.length} total
+                  </span>
+                </div>
+                {Object.entries(byType).length === 0
+                  ? <div className="analytics-no-data">No data yet</div>
+                  : <BarChart data={Object.entries(byType)} maxVal={maxBar} />
+                }
+              </div>
 
-          {/* Top ideas */}
-          <div style={{ ...s.card, flex: 1 }}>
-            <div style={s.cardTitleRow}>
-              <div>
-                <h3 style={s.cardTitle}>Top Performing Ideas</h3>
-                <p style={s.cardSub}>Based on votes & engagement</p>
+              {/* Top ideas table */}
+              <div className="analytics-card analytics-card-side">
+                <div className="analytics-card-title-row">
+                  <div>
+                    <h3 className="analytics-card-title">Top Performing Ideas</h3>
+                    <p className="analytics-card-sub">Hover rows to see views & reactions</p>
+                  </div>
+                </div>
+                <table className="analytics-table">
+                  <thead>
+                    <tr>{["RANK","TITLE","VOTES"].map(h => <th key={h} className="analytics-th">{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {topIdeas.map((idea,i) => <IdeaRow key={idea._id} idea={idea} rank={i} />)}
+                    {!topIdeas.length && (
+                      <tr><td colSpan={3} className="analytics-no-data">No data yet</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <table style={s.table}>
-              <thead>
-                <tr>
-                  {["RANK", "TITLE", "VOTES"].map(h => (
-                    <th key={h} style={s.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[...ideas].sort((a, b) => b.votes - a.votes).slice(0, 5).map((idea, i) => (
-                  <tr key={idea._id} style={s.tr}>
-                    <td style={s.td}>
-                      {i < 3 ? (
-                        <span style={{ ...s.rankBadge, background: i === 0 ? "#FEF9C3" : i === 1 ? "#F3F4F6" : "#FEF3C7", color: i === 0 ? "#CA8A04" : i === 1 ? "#6B7280" : "#D97706" }}>
-                          {i + 1}
+
+            {/* Category Management */}
+            {isManager && (
+              <div className="analytics-card">
+                <h3 className="analytics-card-title">Category Management</h3>
+                <p className="analytics-card-sub">Manage the categories available for idea submission.</p>
+                <div className="analytics-cat-row">
+                  <div>
+                    <div className="analytics-cat-label">Add New Category</div>
+                    <form onSubmit={handleAddCategory} className="analytics-cat-form">
+                      <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="e.g. Sustainability" className="analytics-cat-input" />
+                      <button type="submit" disabled={adding} className="analytics-cat-add-btn">+</button>
+                    </form>
+                    {catError && <div className="analytics-cat-error">{catError}</div>}
+                  </div>
+                  <div className="analytics-cat-section">
+                    <div className="analytics-cat-label">Active Categories ({categories.length})</div>
+                    <div className="analytics-tag-list">
+                      {categories.length===0 && <span className="analytics-cat-empty">No categories yet.</span>}
+                      {categories.map(cat => (
+                        <span key={cat._id} className="analytics-tag">
+                          {cat.name}
+                          <button onClick={() => handleDeleteCategory(cat._id)} className="analytics-tag-x" title="Remove">×</button>
                         </span>
-                      ) : <span style={{ color: "#9CA3AF", fontSize: 14, paddingLeft: 8 }}>{i + 1}</span>}
-                    </td>
-                    <td style={{ ...s.td, maxWidth: 200 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{idea.title}</div>
-                      <div style={{ fontSize: 11, color: "#9CA3AF" }}>{idea.topicType}</div>
-                    </td>
-                    <td style={{ ...s.td, fontWeight: 600, color: "#111827", fontSize: 14 }}>{idea.votes}</td>
-                  </tr>
-                ))}
-                {ideas.length === 0 && (
-                  <tr><td colSpan={3} style={{ textAlign: "center", color: "#9CA3AF", padding: "24px 0", fontSize: 13 }}>No data yet</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Category Management */}
-        {isManager && (
-          <div style={s.card}>
-            <h3 style={s.cardTitle}>Category Management</h3>
-            <p style={s.cardSub}>Manage the categories available for idea submission.</p>
-
-            <div style={s.catRow}>
-              <div>
-                <div style={s.catLabel}>Add New Category</div>
-                <form onSubmit={handleAddCategory} style={s.catForm}>
-                  <input
-                    value={newCatName}
-                    onChange={e => setNewCatName(e.target.value)}
-                    placeholder="e.g. Sustainability"
-                    style={s.catInput}
-                  />
-                  <button type="submit" disabled={adding} style={s.catAddBtn}>+</button>
-                </form>
-                {catError && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>{catError}</div>}
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <div style={s.catLabel}>Active Categories</div>
-                <div style={s.tagList}>
-                  {categories.length === 0 && (
-                    <span style={{ fontSize: 13, color: "#9CA3AF" }}>No categories yet.</span>
-                  )}
-                  {categories.map(cat => (
-                    <span key={cat._id} style={s.tag}>
-                      {cat.name}
-                      <button onClick={() => handleDeleteCategory(cat._id)} style={s.tagX}>×</button>
-                    </span>
-                  ))}
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {!isManager && (
-          <div style={s.card}>
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#9CA3AF" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>Restricted Access</div>
-              <div style={{ fontSize: 13, marginTop: 6 }}>Analytics and category management are available to QA Managers and Administrators.</div>
-            </div>
-          </div>
+            {!isManager && (
+              <div className="analytics-card">
+                <div className="analytics-restricted">
+                  <div className="analytics-restricted-icon">🔒</div>
+                  <div className="analytics-restricted-title">Restricted Access</div>
+                  <div className="analytics-restricted-sub">Analytics and category management are available to QA Managers and Administrators.</div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </main>
+
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes spin  { to{transform:rotate(360deg)} }
+      `}</style>
     </Layout>
   );
 }
 
-const s = {
-  main: { flex: 1, padding: 24, overflowY: "auto" },
-  pageHeader: { marginBottom: 24 },
-  pageTitle: { fontSize: 24, fontWeight: 700, color: "#111827", marginBottom: 4 },
-  pageSub: { fontSize: 14, color: "#6B7280" },
-  pageActions: { display: "flex", gap: 10, marginTop: 12 },
-  downloadBtn: { padding: "8px 16px", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13, color: "#374151", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 },
-  statsRow: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 20 },
-  statCard: { background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB" },
-  statTop: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  statIcon: { fontSize: 20 },
-  delta: { fontSize: 12, color: "#10B981", fontWeight: 600, background: "#F0FDF4", padding: "2px 8px", borderRadius: 20 },
-  statLabel: { fontSize: 12, color: "#9CA3AF", marginBottom: 4 },
-  statValue: { fontSize: 28, fontWeight: 700 },
-  row: { display: "flex", gap: 16, marginBottom: 20 },
-  card: { background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", marginBottom: 16 },
-  cardTitleRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-  cardTitle: { fontSize: 15, fontWeight: 600, color: "#111827", margin: 0 },
-  cardSub: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
-  menuBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#9CA3AF" },
-  barChart: { display: "flex", flexDirection: "column", gap: 14, padding: "8px 0 20px" },
-  barRow: { display: "flex", alignItems: "center", gap: 12 },
-  barLabel: { fontSize: 12, color: "#6B7280", width: 80, flexShrink: 0 },
-  barTrack: { flex: 1, height: 8, background: "#F3F4F6", borderRadius: 4, overflow: "hidden" },
-  barFill: { height: "100%", background: "linear-gradient(90deg, #3B82F6, #60A5FA)", borderRadius: 4, transition: "width 0.5s" },
-  barCount: { fontSize: 12, color: "#9CA3AF", width: 24, textAlign: "right" },
-  table: { width: "100%", borderCollapse: "collapse" },
-  th: { fontSize: 11, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.05em", textAlign: "left", padding: "0 8px 10px" },
-  tr: { borderBottom: "1px solid #F3F4F6" },
-  td: { padding: "10px 8px", verticalAlign: "middle" },
-  rankBadge: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: "50%", fontSize: 12, fontWeight: 700 },
-  catRow: { display: "flex", gap: 32, flexWrap: "wrap", marginTop: 12 },
-  catLabel: { fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 8 },
-  catForm: { display: "flex", gap: 8 },
-  catInput: { padding: "8px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13, color: "#111827", outline: "none", width: 200 },
-  catAddBtn: { width: 34, height: 34, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
-  tagList: { display: "flex", flexWrap: "wrap", gap: 8 },
-  tag: { display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", background: "#EFF6FF", color: "#1D4ED8", borderRadius: 20, fontSize: 13, fontWeight: 500 },
-  tagX: { background: "none", border: "none", cursor: "pointer", color: "#93C5FD", fontSize: 16, lineHeight: 1, padding: 0 },
-};

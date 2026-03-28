@@ -32,8 +32,13 @@ export default function Topbar({ title, onSearch, showNewIdea, onNewIdea, toggle
   // 2. LẮNG NGHE SOCKET ĐỂ BẬT THÔNG BÁO MỚI LÊN ĐẦU
   useEffect(() => {
     socket.on("notification", (newNotif) => {
-      // Thêm thông báo mới nhất vào đầu mảng
-      setNotifications(prev => [newNotif, ...prev]);
+      // Normalize ideaId thành string phòng trường hợp server gửi ObjectId
+      const normalized = {
+        ...newNotif,
+        _id:    newNotif._id?.toString()    || newNotif._id,
+        ideaId: newNotif.ideaId?.toString() || newNotif.ideaId,
+      };
+      setNotifications(prev => [normalized, ...prev]);
     });
 
     return () => socket.off("notification");
@@ -76,7 +81,7 @@ export default function Topbar({ title, onSearch, showNewIdea, onNewIdea, toggle
 
     // Chuyển hướng đến bài viết
     if (notif.ideaId) {
-      navigate(`/ideas/${notif.ideaId}`);
+      navigate(`/ideas/${notif.ideaId.toString()}`);
     }
   };
 

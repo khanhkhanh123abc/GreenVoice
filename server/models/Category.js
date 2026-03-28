@@ -1,11 +1,5 @@
 import mongoose from "mongoose";
 
-/**
- * Category model
- * Quan hệ:
- *   - 1 Category  →  nhiều Idea  (reference bên Idea: categoryId)
- *   - 1 Idea      →  1 Category
- */
 const categorySchema = new mongoose.Schema(
   {
     name: {
@@ -20,6 +14,25 @@ const categorySchema = new mongoose.Schema(
       trim: true,
       maxlength: [500, "Description cannot exceed 500 characters"],
       default: "",
+    },
+
+    // Ngày bắt đầu mở nhận ideas (null = mở ngay khi tạo)
+    openDate: {
+      type: Date,
+      default: null,
+    },
+
+    // Hạn chót nộp ideas (null = không giới hạn)
+    closureDate: {
+      type: Date,
+      default: null,
+    },
+
+    // Người tạo topic
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   { timestamps: true }

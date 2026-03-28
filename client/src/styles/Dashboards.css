@@ -1,0 +1,106 @@
+/* ── Shared Dashboard Download Buttons ───── */
+.dash-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.dash-live-badge {
+  font-size: 12px;
+  color: #94A3B8;
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 99px;
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10B981;
+  animation: dash-pulse 2s infinite;
+  display: inline-block;
+}
+
+@keyframes dash-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.dash-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dash-btn-csv {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #fff;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.dash-btn-csv:hover:not(:disabled) { background: #F9FAFB; }
+.dash-btn-csv:disabled { cursor: not-allowed; opacity: 0.7; }
+.dash-btn-csv.downloading { background: #F0FDF4; color: #15803D; cursor: not-allowed; }
+
+.dash-btn-zip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #2563EB;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(37,99,235,0.3);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.dash-btn-zip:hover:not(:disabled) { background: #1D4ED8; }
+.dash-btn-zip:disabled { cursor: not-allowed; opacity: 0.7; }
+.dash-btn-zip.zipping { background: #1D4ED8; cursor: not-allowed; }
+
+/* TeachingQuality - star breakdown */
+.dash-star-row { display: flex; gap: 2px; }
+.dash-star-breakdown { display: flex; flex-direction: column; gap: 1px; }
+.dash-star-item { display: flex; align-items: center; gap: 4px; }
+.dash-star-item-label { font-size: 10px; color: #F59E0B; width: 14px; }
+.dash-star-track { width: 48px; height: 4px; background: #F1F5F9; border-radius: 2px; overflow: hidden; }
+.dash-star-count { font-size: 10px; color: #94A3B8; }
+.dash-rating-cell { display: flex; align-items: center; gap: 6px; }
+
+/* DataBadge */
+.dash-data-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.dash-data-badge.real { background: #D1FAE5; color: #065F46; }
+.dash-data-badge.no-data { background: #FEF3C7; color: #92400E; }
+
+/* StaffPerformance - score bar */
+.dash-score-cell { display: flex; align-items: center; gap: 6px; }
+.dash-score-bar-track { flex: 1; height: 4px; background: #F1F5F9; border-radius: 2px; min-width: 40px; }
+.dash-score-bar-fill { height: 100%; background: #3B82F6; border-radius: 2px; }
+
+/* Star rating */
+.dash-star-filled { color: #F59E0B; font-size: 13px; }
+.dash-star-empty  { color: #E2E8F0; font-size: 13px; }
+.dash-star-fill   { height: 100%; background: #F59E0B; border-radius: 2px; }

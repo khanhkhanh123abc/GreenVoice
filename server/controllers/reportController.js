@@ -2,10 +2,10 @@ import Report from "../models/Report.js";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
+import { sendEmail, buildReportNotificationEmail } from "../utils/emailService.js";
 
 // ─────────────────────────────────────────────
 //  CREATE REPORT  –  POST /api/reports
-//  Chỉ QA Coordinator được gửi report
 // ─────────────────────────────────────────────
 export const createReport = async (req, res) => {
   try {
@@ -21,7 +21,7 @@ export const createReport = async (req, res) => {
     });
 
     // Gửi thông báo real-time cho tất cả Admin
-    const admins = await User.find({ role: "Administrator" }).select("_id");
+    const admins = await User.find({ role: "Administrator" }).select("_id name email");
 
     const msg = `📋 QAC ${sender.name} vừa gửi một report mới: "${title}"`;
 
@@ -29,11 +29,37 @@ export const createReport = async (req, res) => {
       const notif = await Notification.create({
         recipientId: admin._id,
         senderName: sender.name,
-        ideaId: report._id, // dùng chung field để lưu ref đến report
+        ideaId: report._id,
         type: "report",
         message: msg,
       });
-      req.io.to(admin._id.toString()).emit("notification", notif);
+      const notif1Plain = { ...notif.toObject(), _id: notif._id.toString(), ideaId: notif.ideaId?.toString() || null };
+      req.io.to(admin._id.toString()).emit("notification", notif1Plain);
+    }
+
+    // ───── Gửi Email cho tất cả Admin ─────
+    if (admins.length > 0) {
+      const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+      const reportLink = `${CLIENT_URL}/reports`;
+
+      const emailPromises = admins.map((admin) => {
+        const { subject, html } = buildReportNotificationEmail({
+          adminName: admin.name,
+          qacName: sender.name,
+          qacEmail: sender.email,
+          reportTitle: title,
+          reportType: type || "Chung",
+          reportContent: content,
+          reportLink,
+        });
+        return sendEmail(admin.email, subject, html).catch((err) =>
+          console.error(`⚠️ Không thể gửi mail cho admin ${admin.email}:`, err.message)
+        );
+      });
+
+      Promise.all(emailPromises).then(() =>
+        console.log(`✅ Đã gửi email thông báo report mới cho ${admins.length} admin.`)
+      );
     }
 
     res.status(201).json({
@@ -48,8 +74,6 @@ export const createReport = async (req, res) => {
 
 // ─────────────────────────────────────────────
 //  GET ALL REPORTS  –  GET /api/reports
-//  Admin: xem tất cả
-//  QAC: chỉ xem report của mình
 // ─────────────────────────────────────────────
 export const getAllReports = async (req, res) => {
   try {
@@ -84,7 +108,6 @@ export const getAllReports = async (req, res) => {
 
 // ─────────────────────────────────────────────
 //  GET ONE REPORT  –  GET /api/reports/:id
-//  Admin hoặc QAC chủ sở hữu
 // ─────────────────────────────────────────────
 export const getReportById = async (req, res) => {
   try {
@@ -98,7 +121,6 @@ export const getReportById = async (req, res) => {
 
     if (!report) return res.status(404).json({ message: "Report not found" });
 
-    // QAC chỉ được xem report của chính mình
     if (
       req.user.role === "QA Coordinator" &&
       report.senderId._id.toString() !== req.user._id.toString()
@@ -114,7 +136,6 @@ export const getReportById = async (req, res) => {
 
 // ─────────────────────────────────────────────
 //  APPROVE REPORT  –  PATCH /api/reports/:id/approve
-//  Chỉ Admin
 // ─────────────────────────────────────────────
 export const approveReport = async (req, res) => {
   try {
@@ -137,7 +158,6 @@ export const approveReport = async (req, res) => {
     report.resolvedAt = new Date();
     await report.save();
 
-    // Thông báo cho QAC người gửi
     const msg = `✅ Report "${report.title}" của bạn đã được Admin duyệt.${adminNote ? ` Ghi chú: ${adminNote}` : ""}`;
     const notif = await Notification.create({
       recipientId: report.senderId,
@@ -146,7 +166,8 @@ export const approveReport = async (req, res) => {
       type: "report",
       message: msg,
     });
-    req.io.to(report.senderId.toString()).emit("notification", notif);
+    const notif2Plain = { ...notif.toObject(), _id: notif._id.toString(), ideaId: notif.ideaId?.toString() || null };
+      req.io.to(report.senderId.toString()).emit("notification", notif2Plain);
 
     res.json({ message: "Report approved", report });
   } catch (err) {
@@ -156,7 +177,6 @@ export const approveReport = async (req, res) => {
 
 // ─────────────────────────────────────────────
 //  REJECT REPORT  –  PATCH /api/reports/:id/reject
-//  Chỉ Admin
 // ─────────────────────────────────────────────
 export const rejectReport = async (req, res) => {
   try {
@@ -179,7 +199,6 @@ export const rejectReport = async (req, res) => {
     report.resolvedAt = new Date();
     await report.save();
 
-    // Thông báo cho QAC người gửi
     const msg = `❌ Report "${report.title}" của bạn đã bị Admin từ chối.${adminNote ? ` Lý do: ${adminNote}` : ""}`;
     const notif = await Notification.create({
       recipientId: report.senderId,
@@ -198,7 +217,6 @@ export const rejectReport = async (req, res) => {
 
 // ─────────────────────────────────────────────
 //  DELETE REPORT  –  DELETE /api/reports/:id
-//  Chỉ Admin hoặc QAC chủ sở hữu (khi còn pending)
 // ─────────────────────────────────────────────
 export const deleteReport = async (req, res) => {
   try {
@@ -216,7 +234,6 @@ export const deleteReport = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    // QAC chỉ xóa được khi report còn pending
     if (isOwner && !isAdmin && report.status !== "pending") {
       return res.status(403).json({ message: "Cannot delete a report that has already been processed." });
     }

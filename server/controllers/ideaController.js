@@ -41,6 +41,7 @@ export const createIdea = async (req, res) => {
       documents: documentPaths,
     });
 
+    req.io.emit("analyticsUpdate");
     res.status(201).json({ success: true, message: "Idea created successfully", idea });
   } catch (error) {
     console.error("LỖI KHI TẠO IDEA:", error);
@@ -126,7 +127,7 @@ export const getIdeaById = async (req, res) => {
     const idea = await Idea.findByIdAndUpdate(
       req.params.id,
       { $inc: { views: 1 } },
-      { returnDocument: 'after' }
+      { new: true }
     )
       .populate({ path: "authorId", select: "name email role" })
       .populate({ path: "campaignId", select: "name" })
@@ -226,6 +227,7 @@ export const deleteIdea = async (req, res) => {
     await Document.deleteMany({ ideaId: idea._id });
     await idea.deleteOne();
 
+    req.io.emit("analyticsUpdate");
     res.json({ message: "Idea and related documents deleted successfully." });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -280,8 +282,14 @@ export const addComment = async (req, res) => {
         message: msg
       });
 
-      req.io.to(idea.authorId.toString()).emit("notification", newNotif);
+      const notifPlain = {
+        ...newNotif.toObject(),
+        _id:    newNotif._id.toString(),
+        ideaId: newNotif.ideaId.toString(),
+      };
+      req.io.to(idea.authorId.toString()).emit("notification", notifPlain);
     }
+    req.io.emit("analyticsUpdate");
     res.status(201).json(populatedComment);
   } catch (error) {
     res.status(500).json({ error: error.message });
