@@ -17,17 +17,17 @@ export function AuthProvider({ children }) {
   });
 
   const login = useCallback(async (email, password) => {
-    // 1. Quét sạch tàn dư của phiên đăng nhập cũ trước khi gọi API
+    // 1. Clear any residual old session data before calling the API
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     
     const { data } = await api.post("/auth/login", { email, password });
     
-    // 2. Lưu thẻ từ (token) và thông tin user mới tinh vào
+    // 2. Save the new token and user info
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
     
-    // 3. Cập nhật State cho toàn hệ thống
+    // 3. Update global State
     setToken(data.token);
     setUser(data.user);
     
@@ -35,14 +35,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
-    // 4. Dùng lệnh clear() để diệt tận gốc mọi rác thừa trong LocalStorage
+    // 4. Use clear() to completely wipe all stale data from LocalStorage
     localStorage.clear(); 
     
     setToken(null);
     setUser(null);
     
-    // Ép trình duyệt tải lại trang để reset hoàn toàn bộ nhớ RAM của React
-    // (Đảm bảo không còn dữ liệu bài viết cũ hay socket cũ bị kẹt lại)
+    // Force browser reload to fully reset React memory
+    // (Ensures no old post data or stale sockets remain)
     window.location.href = '/login'; 
   }, []);
 
@@ -53,8 +53,8 @@ export function AuthProvider({ children }) {
       setUser(data);
       return data;
     } catch (error) {
-      // 5. NẾU LỖI (Ví dụ: Token hết hạn, Backend đổi key): Tự động đăng xuất ngay lập tức
-      console.warn("Phiên đăng nhập không hợp lệ, tự động dọn dẹp...");
+      // 5. ON ERROR (e.g. Token expired, Backend key changed): Auto logout immediately
+      console.warn("Invalid session, auto cleaning up...");
       localStorage.clear();
       setToken(null);
       setUser(null);

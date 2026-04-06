@@ -4,17 +4,21 @@ import User from "../models/User.js";
 
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role, department } = req.body;
+    const { name, email, password, role, department, phone } = req.body;
+
+    if (!email || !email.endsWith("@univoice.vn"))
+      return res.status(400).json({ message: "Only @univoice.vn emails are allowed." });
+
+    // Validate phone
+    if (!phone || !/^0\d{9}$/.test(phone))
+      return res.status(400).json({ message: "Phone must start with 0 and be exactly 10 digits." });
+
     if (await User.findOne({ email }))
       return res.status(400).json({ message: "Email already exists" });
 
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({
-      name,
-      email,
-      password: hashed,
-      department,
-      role: 'Student'
+      name, email, password: hashed, department, phone, role: 'Student'
     });
     res.status(201).json({ message: "Registered successfully", userId: user._id });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -48,11 +52,17 @@ export const getProfile = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { name, department } = req.body;
+    const { name, department, phone } = req.body;
+
+    // Server-side phone validation
+    if (!phone) return res.status(400).json({ message: "Phone number is required." });
+    if (!/^\d{10}$/.test(phone)) return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+    if (!phone.startsWith("0")) return res.status(400).json({ message: "Phone number must start with 0." });
+
     const updated = await User.findByIdAndUpdate(
       req.user._id,
-      { name, department },
-      { returnDocument: 'after' } // Sử dụng bản này để hết lỗi Warning màu vàng
+      { name, department, phone },
+      { returnDocument: 'after' }
     ).select("-password");
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }

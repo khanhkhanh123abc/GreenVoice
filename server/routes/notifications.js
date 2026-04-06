@@ -4,19 +4,19 @@ import Notification from '../models/Notification.js';
 
 const router = express.Router();
 
-// 1. Lấy 20 thông báo gần nhất — ideaId trả về dạng string
+// 1. Get 20 most recent notifications
 router.get('/', protect, async (req, res) => {
     try {
         const notifications = await Notification.find({ recipientId: req.user._id })
             .sort({ createdAt: -1 })
             .limit(20)
-            .lean(); // lean() → plain JS objects, ObjectId tự convert thành string
+            .lean();
 
-        // Đảm bảo ideaId luôn là string để frontend navigate đúng
         const result = notifications.map(n => ({
             ...n,
-            _id:    n._id.toString(),
-            ideaId: n.ideaId?.toString() || null,
+            _id:      n._id.toString(),
+            ideaId:   n.ideaId?.toString()   || null,
+            reportId: n.reportId?.toString() || null,
         }));
 
         res.json(result);
@@ -25,7 +25,7 @@ router.get('/', protect, async (req, res) => {
     }
 });
 
-// 2. Đánh dấu đã đọc khi click vào thông báo
+// 2. Mark as read when notification is clicked
 router.put('/:id/read', protect, async (req, res) => {
     try {
         await Notification.findByIdAndUpdate(req.params.id, { isRead: true });

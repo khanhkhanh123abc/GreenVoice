@@ -106,3 +106,13 @@
 
 .register-link { color: #2563EB; text-decoration: none; font-weight: 500; }
 .register-link:hover { text-decoration: underline; }
+
+.register-hint {
+  font-size: 12px;
+  color: #6B7280;
+  margin-top: 5px;
+}
+
+.register-hint--error {
+  color: #DC2626;
+}

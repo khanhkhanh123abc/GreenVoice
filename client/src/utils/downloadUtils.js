@@ -101,28 +101,6 @@ export function downloadZIP(files, zipName) {
 
 // ── Data preparers per dashboard ─────────────
 
-export function getAnalyticsFiles(ideas, categories) {
-  const topIdeas = [...ideas].sort((a, b) => b.votes - a.votes);
-  const byTopic  = ideas.reduce((acc, i) => { acc[i.topicType] = (acc[i.topicType]||0)+1; return acc; }, {});
-  return [
-    {
-      name: "top_ideas.csv",
-      rows: topIdeas.map((idea, i) => ({ rank: i+1, title: idea.title, type: idea.topicType, votes: idea.votes, views: idea.views })),
-      cols: ["rank","title","type","votes","views"],
-    },
-    {
-      name: "ideas_by_topic.csv",
-      rows: Object.entries(byTopic).map(([topic, count]) => ({ topic, count })),
-      cols: ["topic","count"],
-    },
-    {
-      name: "categories.csv",
-      rows: categories.map(c => ({ name: c.name, description: c.description || "" })),
-      cols: ["name","description"],
-    },
-  ];
-}
-
 export function getSystemFiles(data) {
   return [
     { name: "system_stats.csv",     rows: [data.stats],        cols: ["totalStaff","totalStudents","totalIdeas","totalVotes","totalComments","totalReactions"] },

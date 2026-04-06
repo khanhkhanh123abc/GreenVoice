@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
-import './index.css'; // Bắt buộc giữ lại để chạy Tailwind CSS
+import './index.css'; // Required to run Tailwind CSS
 
 const style = document.createElement("style");
 style.textContent = `

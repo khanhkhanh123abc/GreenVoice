@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import StudentProfile from "../models/StudentProfile.js";
 import StaffProfile from "../models/AcademicStaffProfile.js";
 import Feedback from "../models/Feedback.js";
+import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
 
 // ──────────────────────────────────────────────────────────────
@@ -74,6 +75,48 @@ export const createClass = async (req, res) => {
       .populate("students", "name email department");
 
     res.status(201).json({ success: true, class: populated });
+
+    // ── Notify: Admin notifies QAC, QAC notifies Admin ──
+    try {
+      const sender = req.user;
+      const isAdmin = sender.role === "Administrator";
+      // Notify the opposite role group
+      const targetRole = isAdmin ? "QA Coordinator" : "Administrator";
+      const targets = await User.find({ role: targetRole }).select("_id");
+      const msg = `🏫 ${sender.name} (${sender.role}) vừa tạo lớp mới: "${name}"`;
+      for (const target of targets) {
+        const notif = await Notification.create({
+          recipientId: target._id,
+          senderName: sender.name,
+          type: "idea", // reuse existing type
+          ideaId: cls._id, // store classId here for navigation
+          message: msg,
+        });
+        req.io.to(target._id.toString()).emit("notification", {
+          ...notif.toObject(),
+          _id: notif._id.toString(),
+        });
+      }
+    } catch (notifErr) {
+      console.error("Class create notification error:", notifErr.message);
+    }
+
+    // ── Notify assigned staff ──
+    if (academicStaffId) {
+      try {
+        const msg = `🏫 Bạn đã được phân công dạy lớp: "${name}" bởi ${req.user.name}`;
+        const notif = await Notification.create({
+          recipientId: academicStaffId,
+          senderName: req.user.name,
+          type: "idea",
+          ideaId: cls._id,
+          message: msg,
+        });
+        req.io.to(academicStaffId.toString()).emit("notification", {
+          ...notif.toObject(), _id: notif._id.toString(),
+        });
+      } catch (e) { console.error("Staff assign notification error:", e.message); }
+    }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -121,6 +164,37 @@ export const updateClass = async (req, res) => {
       .populate("students", "name email department");
 
     res.json({ success: true, class: populated });
+
+    // ── Notify opposite role ──
+    try {
+      const sender = req.user;
+      const targetRole = sender.role === "Administrator" ? "QA Coordinator" : "Administrator";
+      const targets = await User.find({ role: targetRole }).select("_id");
+      const msg = `✏️ ${sender.name} (${sender.role}) vừa cập nhật lớp: "${cls.name}"`;
+      for (const target of targets) {
+        const notif = await Notification.create({
+          recipientId: target._id, senderName: sender.name, type: "idea", ideaId: cls._id, message: msg,
+        });
+        req.io.to(target._id.toString()).emit("notification", { ...notif.toObject(), _id: notif._id.toString() });
+      }
+    } catch (e) { console.error("Class update notification error:", e.message); }
+
+    // ── Notify newly assigned staff ──
+    if (academicStaffId && academicStaffId !== cls.academicStaff?.toString()) {
+      try {
+        const msg = `🏫 Bạn đã được phân công dạy lớp: "${cls.name}" bởi ${req.user.name}`;
+        const notif = await Notification.create({
+          recipientId: academicStaffId,
+          senderName: req.user.name,
+          type: "idea",
+          ideaId: cls._id,
+          message: msg,
+        });
+        req.io.to(academicStaffId.toString()).emit("notification", {
+          ...notif.toObject(), _id: notif._id.toString(),
+        });
+      } catch (e) { console.error("Staff assign notification error:", e.message); }
+    }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -148,6 +222,20 @@ export const deleteClass = async (req, res) => {
 
     await cls.deleteOne();
     res.json({ success: true, message: "Class deleted" });
+
+    // ── Notify opposite role ──
+    try {
+      const sender = req.user;
+      const targetRole = sender.role === "Administrator" ? "QA Coordinator" : "Administrator";
+      const targets = await User.find({ role: targetRole }).select("_id");
+      const msg = `🗑️ ${sender.name} (${sender.role}) vừa xóa lớp: "${cls.name}"`;
+      for (const target of targets) {
+        const notif = await Notification.create({
+          recipientId: target._id, senderName: sender.name, type: "idea", message: msg,
+        });
+        req.io.to(target._id.toString()).emit("notification", { ...notif.toObject(), _id: notif._id.toString() });
+      }
+    } catch (e) { console.error("Class delete notification error:", e.message); }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -395,6 +483,33 @@ export const getMyReceivedFeedback = async (req, res) => {
       .sort({ createdAt: -1 });
 
     // Tính điểm trung bình
+    const avgRating =
+      feedbacks.length > 0
+        ? feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length
+        : 0;
+
+    res.json({
+      success: true,
+      feedbacks,
+      stats: {
+        total: feedbacks.length,
+        avgRating: Math.round(avgRating * 10) / 10,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET /api/classes/feedback/all  → QAC / Admin xem toàn bộ feedback của hệ thống
+export const getAllFeedback = async (req, res) => {
+  try {
+    const feedbacks = await Feedback.find()
+      .populate("studentId", "name email")
+      .populate("staffId", "name email")
+      .populate("classId", "name")
+      .sort({ createdAt: -1 });
+
     const avgRating =
       feedbacks.length > 0
         ? feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length

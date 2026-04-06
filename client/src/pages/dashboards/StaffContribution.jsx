@@ -1,9 +1,9 @@
 import { useState } from "react";
 import "../../styles/Dashboards.css";
 import { useAnalytics } from "../../hooks/useAnalytics";
-import Layout from "../../components/Layout";
-import Topbar from "../../components/Topbar";
-import { StatCard, ChartCard, BarChart, DonutChart, HBarChart, RankBadge, Loader } from "../../components/Charts";
+import Layout from "../../components/common/Layout";
+import Topbar from "../../components/navigation/Topbar";
+import { StatCard, ChartCard, BarChart, DonutChart, HBarChart, RankBadge, Loader } from "../../components/common/Charts";
 import { downloadCSV, downloadZIP, getContributionFiles } from "../../utils/downloadUtils";
 
 export default function StaffContribution() {

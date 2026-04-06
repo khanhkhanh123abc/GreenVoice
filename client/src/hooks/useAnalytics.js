@@ -2,14 +2,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import api from "../api/axiosInstance";
 
-const SOCKET_URL = "http://localhost:5000";
-const REFRESH_INTERVAL = 1000; // 30 giây
+const SOCKET_URL = "http://localhost:3000";
+const REFRESH_INTERVAL = 1000; // 30 seconds
 
 /**
- * Hook lấy data analytics real-time
+ * Hook to fetch real-time analytics data
  * - Fetch ngay khi mount
- * - Socket.io lắng nghe event "analyticsUpdate" từ server → re-fetch
- * - Fallback polling mỗi 30 giây
+ * - Socket.io listens for "analyticsUpdate" event from server → re-fetch
+ * - Fallback polling every 30 seconds
  */
 export function useAnalytics(endpoint) {
   const [data, setData]       = useState(null);
@@ -33,10 +33,10 @@ export function useAnalytics(endpoint) {
   }, [endpoint]);
 
   useEffect(() => {
-    // 1. Fetch ngay lần đầu
+    // 1. Fetch immediately on first load
     fetchData();
 
-    // 2. Kết nối Socket.io
+    // 2. Connect Socket.io
     const socket = io(SOCKET_URL, { transports: ["websocket"], reconnectionAttempts: 3 });
     socketRef.current = socket;
 
@@ -44,16 +44,16 @@ export function useAnalytics(endpoint) {
       console.log("📡 Analytics socket connected");
     });
 
-    // Khi server emit "analyticsUpdate" → fetch lại
+    // When server emits "analyticsUpdate" → re-fetch
     socket.on("analyticsUpdate", () => {
       fetchData();
     });
 
     socket.on("connect_error", () => {
-      // Socket không kết nối được → không sao, polling vẫn chạy
+      // Socket failed to connect → no worries, polling still runs
     });
 
-    // 3. Polling fallback mỗi 30 giây
+    // 3. Polling fallback every 30 seconds
     timerRef.current = setInterval(fetchData, REFRESH_INTERVAL);
 
     return () => {

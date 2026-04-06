@@ -29,12 +29,12 @@ export const createReport = async (req, res) => {
       const notif = await Notification.create({
         recipientId: admin._id,
         senderName: sender.name,
-        ideaId: report._id,
+        reportId: report._id,   // use reportId, not ideaId
         type: "report",
         message: msg,
       });
-      const notif1Plain = { ...notif.toObject(), _id: notif._id.toString(), ideaId: notif.ideaId?.toString() || null };
-      req.io.to(admin._id.toString()).emit("notification", notif1Plain);
+      const notifPlain = { ...notif.toObject(), _id: notif._id.toString(), reportId: notif.reportId?.toString() || null };
+      req.io.to(admin._id.toString()).emit("notification", notifPlain);
     }
 
     // ───── Gửi Email cho tất cả Admin ─────
@@ -77,7 +77,7 @@ export const createReport = async (req, res) => {
 // ─────────────────────────────────────────────
 export const getAllReports = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status, type, page = 1, limit = 10 } = req.query;
     const filter = {};
 
     if (req.user.role === "QA Coordinator") {
@@ -85,6 +85,7 @@ export const getAllReports = async (req, res) => {
     }
 
     if (status) filter.status = status;
+    if (type) filter.type = type;
 
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -162,12 +163,12 @@ export const approveReport = async (req, res) => {
     const notif = await Notification.create({
       recipientId: report.senderId,
       senderName: req.user.name,
-      ideaId: report._id,
+      reportId: report._id,
       type: "report",
       message: msg,
     });
-    const notif2Plain = { ...notif.toObject(), _id: notif._id.toString(), ideaId: notif.ideaId?.toString() || null };
-      req.io.to(report.senderId.toString()).emit("notification", notif2Plain);
+    const notifPlain = { ...notif.toObject(), _id: notif._id.toString(), reportId: notif.reportId?.toString() || null };
+    req.io.to(report.senderId.toString()).emit("notification", notifPlain);
 
     res.json({ message: "Report approved", report });
   } catch (err) {

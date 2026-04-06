@@ -10,12 +10,13 @@ import ideaRoutes from "./routes/ideas.js";
 import categoryRoutes from "./routes/categories.js";
 import userRoutes from "./routes/user.js";
 import attendanceRoutes from "./routes/attendance.js";
-import analyticsRoutes from "./routes/analytics.js";
 import notificationRoutes from "./routes/notifications.js";
 import learningMaterialRoutes from "./routes/learningMaterials.js";
 import reportRoutes from "./routes/reports.js";
 import campaignRoutes from "./routes/campaign.js";
 import classRoutes from "./routes/classes.js";
+import analyticsRoutes from "./routes/analytics.js";
+import aiRoutes from "./routes/ai.js";     
 import { startDailyStatsCronJob } from "./jobs/dailyTopicStats.js";
 
 import { createServer } from "http";
@@ -62,12 +63,13 @@ app.use("/api/ideas", ideaRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/attendance", attendanceRoutes);
-app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/learning-materials", learningMaterialRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/classes", classRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/ai", aiRoutes);    
 
 app.get("/", (req, res) => {
   res.send("API is running...");
@@ -78,7 +80,7 @@ mongoose
   .then(() => {
     console.log("MongoDB connected");
     startDailyStatsCronJob(); // ← Khởi động cron job
-    const PORT = process.env.PORT || 5000;
+    const PORT = process.env.PORT || 5001;
     httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT} with WebSockets 🚀`);
     });

@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://localhost:5000/api', // Hoặc URL Backend của bạn
+    baseURL: 'http://localhost:3000/api', // Or your Backend URL
 });
 
-// BỘ ĐÁNH CHẶN REQUEST: Luôn lấy Token nóng hổi nhất
+// REQUEST INTERCEPTOR: Always fetch the latest Token
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('token');
@@ -18,19 +18,19 @@ api.interceptors.request.use(
     }
 );
 
-// BỘ ĐÁNH CHẶN RESPONSE: Xử lý tự động văng ra ngoài nếu Token hết hạn hoặc sai
+// RESPONSE INTERCEPTOR: Auto logout if Token expired or invalid
 api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-            // Nếu phát hiện Token tạch, tự động dọn rác để không bị kẹt
+            // If Token is invalid, auto clean up to avoid getting stuck
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             
-            // Nếu không phải đang ở trang login thì mới báo lỗi
+            // Only show error if not already on login page
             if (window.location.pathname !== '/login') {
-                console.warn("Phiên đăng nhập có vấn đề, yêu cầu đăng nhập lại.");
-                // window.location.href = '/login'; // Mở comment dòng này nếu muốn ép đá văng ra login
+                console.warn("Session issue detected, please log in again.");
+                // window.location.href = '/login'; // Uncomment to force redirect to login
             }
         }
         return Promise.reject(error);

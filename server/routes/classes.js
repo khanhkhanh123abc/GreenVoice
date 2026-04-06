@@ -14,6 +14,7 @@ import {
   getFeedbackByClass,
   getMyReceivedFeedback,
   getMySubmittedFeedback,
+  getAllFeedback,
 } from "../controllers/classController.js";
 
 const router = express.Router();
@@ -25,6 +26,14 @@ router.get(
   protect,
   authorize("Academic Staff"),
   getMyReceivedFeedback
+);
+
+// GET  /api/classes/feedback/all  → QAC + Admin xem toàn bộ feedback hệ thống
+router.get(
+  "/feedback/all",
+  protect,
+  authorize("QA Coordinator", "Administrator"),
+  getAllFeedback
 );
 
 // GET  /api/classes/feedback/my-submitted  → Student xem feedback đã gửi
@@ -44,8 +53,8 @@ router.get("/my-classes", protect, authorize("Student"), getMyClasses);
 // POST /api/classes
 router
   .route("/")
-  .get(protect, authorize("Administrator", "QA Manager", "QA Coordinator"), getAllClasses)
-  .post(protect, authorize("Administrator"), createClass);
+  .get(protect, authorize("Administrator", "QA Manager", "QA Coordinator", "Academic Staff", "Support Staff"), getAllClasses)
+  .post(protect, authorize("Administrator", "QA Coordinator"), createClass);
 
 // GET    /api/classes/:id
 // PUT    /api/classes/:id
@@ -53,8 +62,8 @@ router
 router
   .route("/:id")
   .get(protect, getClassById)
-  .put(protect, authorize("Administrator"), updateClass)
-  .delete(protect, authorize("Administrator"), deleteClass);
+  .put(protect, authorize("Administrator", "QA Coordinator"), updateClass)
+  .delete(protect, authorize("Administrator", "QA Coordinator"), deleteClass);
 
 // ─── MEMBERS ─────────────────────────────────────────────────────────────────
 // GET /api/classes/:id/members  → Student + Staff + Admin xem thành viên lớp
@@ -66,13 +75,13 @@ router.get("/:id/members", protect, getClassMembers);
 router.post(
   "/:id/students",
   protect,
-  authorize("Administrator"),
+  authorize("Administrator", "QA Coordinator"),
   addStudentToClass
 );
 router.delete(
   "/:id/students/:studentId",
   protect,
-  authorize("Administrator"),
+  authorize("Administrator", "QA Coordinator"),
   removeStudentFromClass
 );
 

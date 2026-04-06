@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedRoute from "./components/common/ProtectedRoute";
 
 function RoleRedirect() {
   const { user, isLoggedIn } = useAuth();
@@ -10,28 +10,27 @@ function RoleRedirect() {
   return <Navigate to="/ideas" replace />;
 }
 
-// Import thư viện Socket và Toast
+// Import Socket and Toast libraries
 import { io } from "socket.io-client";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-// Import các trang (Pages)
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import Ideas from "./pages/Ideas";
-import Profile from "./pages/Profile";
-import Analytics from "./pages/Analytics";
-import SubmitIdea from "./pages/SubmitIdea";
-import IdeaDetail from "./pages/IdeaDetail";
-import Users from "./pages/Users";
-import LearningMaterials from "./pages/LearningMaterials";
-import LearningMaterialDetail from "./pages/LearningMaterialDetail";
-import Reports from "./pages/Reports";
-import MyAttendance from "./pages/MyAttendance";
-import MyIdeas from "./pages/MyIdeas";
-import Campaigns from "./pages/Campaigns";
-import UserManagement from "./pages/UserManagement";
-
+// Import Pages
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
+import Ideas from "./pages/ideas/Ideas";
+import Profile from "./pages/user/Profile";
+import SubmitIdea from "./pages/ideas/SubmitIdea";
+import IdeaDetail from "./pages/ideas/IdeaDetail";
+import Users from "./pages/management/Users";
+import LearningMaterials from "./pages/learning/LearningMaterials";
+import LearningMaterialDetail from "./pages/learning/LearningMaterialDetail";
+import Reports from "./pages/management/Reports";
+import MyAttendance from "./pages/user/MyAttendance";
+import MyIdeas from "./pages/ideas/MyIdeas";
+import ContentReview from "./pages/ideas/ContentReview";
+import Campaigns from "./pages/management/Campaigns";
+import UserManagement from "./pages/management/UserManagement";
 
 // Import Dashboard pages
 import SystemOverview from "./pages/dashboards/SystemOverview";
@@ -40,17 +39,19 @@ import StaffContribution from "./pages/dashboards/StaffContribution";
 import IdeaEngagement from "./pages/dashboards/IdeaEngagement";
 import StaffPerformance from "./pages/dashboards/StaffPerformance";
 
-import Attendance from "./pages/Attendance";
-import MyClasses from "./pages/MyClasses";
-import ClassDetail from "./pages/ClassDetail";
-import ClassManagement from "./pages/ClassManagement";
-import FeedbackReceived from "./pages/FeedbackReceived";
+import Attendance from "./pages/management/Attendance";
+import MyClasses from "./pages/user/MyClasses";
+import ClassDetail from "./pages/user/ClassDetail";
+import ClassManagement from "./pages/management/ClassManagement";
+import FeedbackReceived from "./pages/user/FeedbackReceived";
+import StaffClassView from "./pages/user/StaffClassView";
+import MyClassStaff from "./pages/user/MyClassStaff";
 
 const QA = ["QA Manager", "Administrator"];
 const ADMIN = ["Administrator"];
 
-// Khởi tạo Socket
-export const socket = io("http://localhost:5000", {
+// Initialize Socket
+export const socket = io("http://localhost:3000", {
   autoConnect: false,
 });
 
@@ -112,12 +113,12 @@ export default function App() {
           } />
           <Route path="/submit-idea" element={<ProtectedRoute><SubmitIdea /></ProtectedRoute>} />
           <Route path="/submit" element={<ProtectedRoute><SubmitIdea /></ProtectedRoute>} />
-          <Route path="/my-ideas" element={
+          <Route path="/content-review" element={<ContentReview />} />
+            <Route path="/my-ideas" element={
             <ProtectedRoute allowedRoles={['Academic Staff', 'Support Staff']}>
               <MyIdeas />
             </ProtectedRoute>
           } />
-          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
@@ -156,7 +157,6 @@ export default function App() {
               <UserManagement />
             </ProtectedRoute>
           } />
-          {/* Default */}
           <Route path="/my-classes" element={
             <ProtectedRoute allowedRoles={['Student']}>
               <MyClasses />
@@ -168,15 +168,29 @@ export default function App() {
             </ProtectedRoute>
           } />
           <Route path="/class-management" element={
-            <ProtectedRoute allowedRoles={['Administrator']}>
+            <ProtectedRoute allowedRoles={['Administrator', 'QA Coordinator']}>
               <ClassManagement />
             </ProtectedRoute>
           } />
+
+          {/* Feedback — Academic Staff sees own, QAC/Admin sees all */}
           <Route path="/feedback-received" element={
-            <ProtectedRoute allowedRoles={['Academic Staff']}>
+            <ProtectedRoute allowedRoles={['Academic Staff', 'QA Coordinator', 'Administrator']}>
               <FeedbackReceived />
             </ProtectedRoute>
           } />
+
+          <Route path="/staff-class/:id" element={
+            <ProtectedRoute allowedRoles={['Academic Staff', 'Support Staff']}>
+              <StaffClassView />
+            </ProtectedRoute>
+          } />
+          <Route path="/my-class" element={
+            <ProtectedRoute allowedRoles={['Academic Staff', 'Support Staff']}>
+              <MyClassStaff />
+            </ProtectedRoute>
+          } />
+
           {/* Default redirect based on role */}
           <Route path="/" element={<RoleRedirect />} />
           <Route path="*" element={<RoleRedirect />} />
